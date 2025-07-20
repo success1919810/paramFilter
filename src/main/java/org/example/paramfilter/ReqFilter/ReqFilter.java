@@ -4,6 +4,7 @@ import jakarta.servlet.*;
 import jakarta.servlet.annotation.WebFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.example.paramfilter.pojo.ReqInfo;
 import org.example.paramfilter.util.MdcUtil;
 
 
@@ -24,21 +25,34 @@ public class ReqFilter implements Filter {
 
         // 把 ServletRequest 转成 HttpServletRequest，用来获取更多信息
         HttpServletRequest httpRequest = (HttpServletRequest) request;
+        BodyReaderHttpServletRequestWrapper wrapper =
+                new BodyReaderHttpServletRequestWrapper(httpRequest);
         MdcUtil.addTraceId();
+        //封装上下文信息
+        ReqInfo reqInfo = new ReqInfo();
+        reqInfo.setIp(wrapper.getRemoteAddr());
+        reqInfo.setMethod(wrapper.getMethod());
+        reqInfo.setUrl(wrapper.getRequestURI());
+        reqInfo.setUserAgent(wrapper.getHeader("User-Agent"));
+        reqInfo.setTraceId(MdcUtil.getTraceId());
+        reqInfo.setBody(wrapper.getBodyString());
+        ReqInfoContext.setReqInfo(reqInfo);
+
+
+        //追踪日志
+        log.info("请求方式为：{}",reqInfo.getMethod());
+        log.info("请求IP为：{}",reqInfo.getIp());
+        log.info("请求URL为：{}",reqInfo.getUrl());
+        log.info("请求traceId为：{}",reqInfo.getTraceId());
+        log.info("请求体为：{}",reqInfo.getBody());
+
 
         try {
-            if ("POST".equalsIgnoreCase(httpRequest.getMethod())) {
-                BodyReaderHttpServletRequestWrapper wrapper =
-                        new BodyReaderHttpServletRequestWrapper(httpRequest);
-
-//                System.out.println("请求体内容: " + wrapper.getBodyString());
-                  log.info("请求体内容:{}",wrapper.getBodyString());
-
                 chain.doFilter(wrapper, response);
-            } else {
-                chain.doFilter(request, response);
             }
-        } finally {
+        finally {
+            //清除ReqInfoContext,防止污染
+            ReqInfoContext.clear();
             // 清除 MDC，避免线程复用污染
             MdcUtil.clear();
         }
