@@ -3,10 +3,13 @@ package org.example.paramfilter.ReqFilter;
 import jakarta.servlet.*;
 import jakarta.servlet.annotation.WebFilter;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.stereotype.Component;
+import lombok.extern.slf4j.Slf4j;
+import org.example.paramfilter.util.MdcUtil;
+
 
 import java.io.IOException;
 
+@Slf4j
 @WebFilter(urlPatterns = "/*", filterName = "myFilter")
 //如果你想要自动注入的话，这里写@Compone会导致过滤器注册两边
 public class ReqFilter implements Filter {
@@ -21,20 +24,24 @@ public class ReqFilter implements Filter {
 
         // 把 ServletRequest 转成 HttpServletRequest，用来获取更多信息
         HttpServletRequest httpRequest = (HttpServletRequest) request;
+        MdcUtil.addTraceId();
 
-        // 打印请求方法和 URI
-        System.out.println("请求方法: " + httpRequest.getMethod());
-        System.out.println("请求地址: " + httpRequest.getRequestURI());
+        try {
+            if ("POST".equalsIgnoreCase(httpRequest.getMethod())) {
+                BodyReaderHttpServletRequestWrapper wrapper =
+                        new BodyReaderHttpServletRequestWrapper(httpRequest);
 
-        // 记录开始时间
-        long startTime = System.currentTimeMillis();
+//                System.out.println("请求体内容: " + wrapper.getBodyString());
+                  log.info("请求体内容:{}",wrapper.getBodyString());
 
-        // 继续执行请求链，放行到下一个过滤器或控制器
-        chain.doFilter(request, response);
-
-        // 记录结束时间
-        long endTime = System.currentTimeMillis();
-        System.out.println("请求耗时: " + (endTime - startTime) + " ms");
+                chain.doFilter(wrapper, response);
+            } else {
+                chain.doFilter(request, response);
+            }
+        } finally {
+            // 清除 MDC，避免线程复用污染
+            MdcUtil.clear();
+        }
     }
 
     @Override
